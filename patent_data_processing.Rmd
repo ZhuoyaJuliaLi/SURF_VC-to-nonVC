@@ -1,0 +1,61 @@
+---
+title: "Patent"
+author: Julia
+output: pdf_document
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+panel_data<-read_dta("DISCERN_Panel_Data_1980_2015.dta")
+```
+
+```{r}
+patent_database<-read_dta("DISCERN_patent_database_1980_2015_final1.dta")
+```
+
+
+# number of patents each company own till now:
+```{r}
+num_patent<-c()
+for(i in 1:nrow(cominfo1)){
+  temp_key=cominfo1[i,]$gvkey
+  permno=panel_data[panel_data$gvkey==temp_key,][1,]$permno_adj[1]
+  if(is.na(permno)==TRUE){
+    num_patent<-c(num_patent,0)
+  } else{
+    n=nrow(patent_database[patent_database$permno_adj==permno,])
+    num_patent<-c(num_patent,n)
+  }
+}
+```
+
+```{r}
+cominfo1$patent_tillnow<-num_patent
+```
+
+# number of patents each company own till they went public:
+```{r}
+num_patent_ipo<-c()
+for(i in 1:nrow(cominfo)){ #loop through the dataframe
+  temp_key=cominfo[i,]$gvkey
+  temp_yr=cominfo[i,]$year_IPO
+  permno=panel_data[panel_data$gvkey==temp_key,][1,]$permno_adj[1] # first access the panel_data to find the corresponding permno_adj which is unqiue for each company (with their gvkey)
+  if(is.na(permno)==TRUE){ #if the company is not found, it means that they do not have any patent
+    num_patent_ipo<-c(num_patent_ipo,0)
+  } else{
+    n=nrow(patent_database[patent_database$permno_adj==permno,]%>%filter(publn_year<=temp_yr)) # with the permno_adj, find the number of patents each company owns before the year they went public
+    num_patent_ipo<-c(num_patent_ipo,n)
+  }
+}
+```
+```{r}
+cominfo$patent_tillipo<-num_patent_ipo #added as a new column in the original company info dataset
+```
+
+
+
+
+

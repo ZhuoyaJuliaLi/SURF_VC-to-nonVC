@@ -1,0 +1,173 @@
+---
+title: "data cleaning and linear regression"
+author: Julia
+output: pdf_document
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+```
+
+# original input file with information on public companies
+```{r}
+ipo<-read.csv("basicIPOs.csv")
+```
+
+# generate a random dataset for further testing samples
+```{r}
+random_ipo= ipo[sample(1:nrow(ipo)), ]
+random_ipo$region<-state.name[match(random_ipo$state,state.abb)]
+```
+```{r}
+write.csv(random_ipo,"ipo_random.csv", row.names = FALSE)
+```
+
+
+# first 500 companies from Diffbot
+```{r}
+temp_df<-read.csv("selected500.csv")
+cominfo1<-read.csv("500compinfo.csv")
+cominfo1$Industry=temp_df$Industries
+```
+
+#second 1500 companies from Diffbot
+```{r}
+cominfo2<-read.csv("500to1500compinfo.csv")
+```
+
+# another 2000 companies from Diffbot
+```{r}
+cominfo3<-read.csv("compinfo2000.csv")
+```
+
+#combine all companies
+```{r}
+cominfo <- rbind(cominfo1, cominfo2,cominfo3)
+```
+
+# change empty cells to NAs for further selecting and making changes
+```{r}
+cominfo <- cominfo %>% mutate_all(na_if,"")
+```
+
+
+# divide the dataset into VC companies and Non VC companies
+```{r}
+vc<-cominfo%>%filter(VC_dummy=="1")
+nonvc<-cominfo%>%filter(VC_dummy=="0")
+```
+
+# tibble listing the number of VC backed companies in each industry  
+```{r}
+vc_noin<-vc%>%drop_na(c("Industry"))
+vcIndustry<-vc_noin %>%
+  group_by(Industry)%>%summarise(Freq=n())%>%arrange(desc(Freq))
+```
+
+```{r}
+vcIndustry
+```
+
+# tibble listing the number of NonVC companies in each industry
+```{r}
+nonvc_noin<-nonvc%>%drop_na(c("Industry"))
+nonvcIndustry<-nonvc_noin %>%
+  group_by(Industry)%>%summarise(Freq=n())%>%arrange(desc(Freq))
+```
+```{r}
+nonvcIndustry
+```
+
+```{r}
+df1<-merge(nonvcIndustry,vcIndustry,by="Industry")
+df1$total<-df1$Freq.x+df1$Freq.y
+df1
+```
+
+# make a ggplot of the types of industries invested by VC of the 20 most common industries
+```{r}
+df1_vc<-head(df1%>%arrange(desc(Freq.y)),20)
+```
+
+```{r}
+ggplot(df1_vc) + geom_bar(aes(x=Industry, y=total), stat="identity",fill="pink") +  geom_bar(aes(x=Industry   , y=Freq.y, fill = "VC"), stat="identity",fill="blue")+ coord_flip() 
+```
+# make a ggplot of the types of industries not invested by VC of the 20 most commonly not invested industries
+```{r}
+df1_nonvc<-head(df1%>%arrange(desc(Freq.x)),20)
+```
+```{r}
+ggplot(df1_nonvc) + geom_bar(aes(x=Industry, y=total), stat="identity",fill="pink") +  geom_bar(aes(x=Industry , y=Freq.x, fill = "NONVC"), stat="identity",fill="orange")+ coord_flip() 
+```
+
+
+# linear model with number of employees as the y variable and only VC_dummy as the x variable 
+```{r}
+model_emp1<-lm(nbEmployees~VC_dummy,cominfo)
+summary(model_emp1)
+```
+
+
+```{r}
+library(lmtest)
+library(sandwich)
+```
+
+# linear regression model with y variable as the number of employees and x variables are VC_dummy, industry, age, and state
+
+```{r}
+model_emp2<-lm(nbEmployees~VC_dummy+factor(Industry)+age+factor(region),cominfo)
+summary(model_emp2)
+```
+
+
+
+```{r}
+extracted_col = fullcom["nbLocations"]
+cominfo$nbLocations = extracted_col
+```
+
+# linear model with number of locations as the y variable and VC, industry, age, and state as x variable after log transformation
+```{r}
+model_loc<-lm(log(unlist(nbLocations))~VC_dummy+factor(Industry)+log(age)+factor(region),cominfo)
+summary(model_loc)
+```
+
+
+# # linear regression model with y variable as the number of employees and x variables are VC_dummy, industry, age, and state after log transformation
+```{r}
+l.cominfo<-cominfo%>%mutate(log.Employees=log(nbEmployees),log.age=log(age))%>%dplyr::select(log.Employees,VC_dummy,Industry,log.age,age,region)
+l.cominfo[is.na(l.cominfo) | l.cominfo=="-Inf"] = NA
+l.model_emp=lm(log.Employees~VC_dummy+factor(Industry)+age+factor(region),l.cominfo)
+```
+
+```{r}
+summary(l.model_emp)
+```
+
+# linear regression model with y variable as the number of patents each company has between the year they are founded and the year they went public and x variables are VC_dummy, industry, age, and state before and after log tranformation
+```{r}
+cominfo$age=2022-cominfo$Year_Founded_Patton
+l.cominfo<-cominfo%>%mutate(log.patent=log(patent_tillipo),log.age=log(age))%>%dplyr::select(patent_tillipo,log.patent,VC_dummy,Industry,log.age,age,region)
+l.cominfo[is.na(l.cominfo) | l.cominfo=="-Inf"] = NA
+```
+
+# before:
+```{r}
+model_patent<-lm(patent_tillipo~VC_dummy+factor(Industry)+age+factor(region),cominfo)
+```
+
+```{r}
+summary(model_patent)
+```
+
+# after:
+```{r}
+l.model_patent<-lm(patent_tillipo~VC_dummy+factor(Industry)+log.age+factor(region),l.cominfo)
+```
+
+```{r}
+summary(l.model_patent)
+```
+
